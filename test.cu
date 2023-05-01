@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cuda.h>
+#include <opencv2/opencv.hpp>
 
 using namespace std;
 
@@ -38,4 +39,17 @@ int main()
 	delete[] temp;
 	cudaFree(a);
 	cudaFree(b);
+
+	cv::Mat image = cv::imread("/public_data1/spectraldata/water_skin_rgb/20220623144118297.png");
+	if (image.empty())
+    {
+        std::cerr << "无法读取图像文件" << std::endl;
+        return false;
+    }
+    // 修改通道顺序为BGR
+    cv::cvtColor(image, image, cv::COLOR_RGB2BGR);
+    // 检查图像是否正确读取
+
+    // 保存结果图像
+    cv::imwrite("./result.jpg", image);
 }

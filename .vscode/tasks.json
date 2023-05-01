@@ -5,7 +5,10 @@
             "label": "mynvcc", //与launch.json的preLaunchTask保持一致
             "type": "shell",
             "command": "nvcc",
-            "args": ["-g","-G","-o","${fileDirname}/${fileBasenameNoExtension}","${file}"]
+            "args": ["-g","-G","-o","${fileDirname}/${fileBasenameNoExtension}","${file}", "-I","/usr/include/opencv4/",
+            "-I","/usr/include/opencv4/opencv/","-L","/usr/lib/x86_64-linux-gnu/",
+            // "/usr/lib/x86_64-linux-gnu/libopencv_*",
+            "-lopencv_core", "-lopencv_imgcodecs", "-lopencv_highgui","-lopencv_imgproc",]
         }
     ]
 }
