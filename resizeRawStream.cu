@@ -4,6 +4,7 @@
 #include <opencv2/opencv.hpp>
 #include <cuda_runtime.h>
 #include<opencv2/imgproc/types_c.h> 
+// 来一个宏定义 调用api看看是否成功，！！
 // #include<opencv2/opencv.hpp>
 #define STREAM_NUM 4
 cv::Mat getRgb(float *rawdata){
@@ -250,7 +251,7 @@ void resize3D(std::string dirpath, int width, int height, int depth, int newWidt
         closedir(dir);
         
     }
-    // 最后同步所有的stream
+    // 最后同步所有的stream 注意在对应的设备上执行！！！
     for (int i = 0; i < STREAM_NUM; i++) {
         cudaSetDevice(i % nDevices);
         cudaStreamSynchronize(stream[i]);
