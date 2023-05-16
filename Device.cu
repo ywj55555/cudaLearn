@@ -21,6 +21,12 @@ int main()
              prop.memoryBusWidth);
       printf("Peak Memory Bandwidth (GB/s): %.2f\n\n",
              2.0 * prop.memoryClockRate * (prop.memoryBusWidth / 8) / 1.0e6);
+       printf("  canMapHostMemory: %d\n", prop.canMapHostMemory);
+      if (prop.deviceOverlap)
+	{
+	       printf("No device will handle overlaps. so no speed up from stream.\n");
+	}
+       
    }
    return 0;
 }
