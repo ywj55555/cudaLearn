@@ -16,6 +16,7 @@ int main()
 	// malloc HOST memory for temp
 	temp = new int[N];
 	// malloc DEVICE memory for a, b
+	// local
 	cudaMalloc(&a, N * sizeof(int));
 	cudaMalloc(&b, N * sizeof(int));
 	// set a's values: a[i] = i
