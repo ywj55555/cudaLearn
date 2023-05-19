@@ -4,7 +4,22 @@
 #include <opencv2/opencv.hpp>
 #include <cuda_runtime.h>
 #include<opencv2/imgproc/types_c.h> 
-// 来一个宏定义 调用api看看是否成功，！！
+// 来一个宏定义 调用api看看是否成功，！！!
+#define CHECK(call) \
+do \
+{ \
+ const cudaError_t error_code = call; \
+ if (error_code != cudaSuccess) \
+ { \
+ printf("CUDA Error:\\n"); \
+ printf(" File: %s\\n", __FILE__); \
+ printf(" Line: %d\\n", __LINE__); \
+ printf(" Error code: %d\\n", error_code); \
+ printf(" Error text: %s\\n", cudaGetErrorString(error_code)); \
+ exit(1); \
+ } \
+} while (0)
+
 // #include<opencv2/opencv.hpp>
 #define STREAM_NUM 4
 cv::Mat getRgb(float *rawdata){
@@ -178,14 +193,14 @@ void resize3D(std::string dirpath, int width, int height, int depth, int newWidt
     cudaGetDeviceCount(&nDevices);
     cudaStream_t stream[STREAM_NUM];
     for (int i = 0; i < STREAM_NUM; ++i) {
-        cudaSetDevice(i % nDevices);
-        cudaHostAlloc(&h_input[i], inputSize * sizeof(float), cudaHostAllocDefault);  // cudaHostAllocMapped 分配
+        CHECK(cudaSetDevice(i % nDevices));
+        CHECK(cudaHostAlloc(&h_input[i], inputSize * sizeof(float), cudaHostAllocDefault));  // cudaHostAllocMapped 分配
         // h_input[i] = (float*)malloc(inputSize * sizeof(float));
-        cudaMalloc(&d_input[i], inputSize * sizeof(float));
-        cudaHostAlloc(&h_output[i], outputsize * sizeof(float), cudaHostAllocDefault);
+        CHECK(cudaMalloc(&d_input[i], inputSize * sizeof(float)));
+        CHECK(cudaHostAlloc(&h_output[i], outputsize * sizeof(float), cudaHostAllocDefault));
         // h_output[i] = (float*)malloc(outputsize * sizeof(float));
-        cudaMalloc(&d_output[i], outputsize * sizeof(float));
-        cudaStreamCreate(&stream[i]);
+        CHECK(cudaMalloc(&d_output[i], outputsize * sizeof(float)));
+        CHECK(cudaStreamCreate(&stream[i]));
     }
     // for (int i = 0; i < STREAM_NUM; ++i) {
     //     cudaHostAlloc(&h_input[i], inputSize * sizeof(float), cudaHostAllocMapped);  // cudaHostAllocMapped 分配
@@ -198,10 +213,11 @@ void resize3D(std::string dirpath, int width, int height, int depth, int newWidt
     // }
     float elapsedTime;
     cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
+    CHECK(cudaSetDevice(0));
+    CHECK(cudaEventCreate(&start));
+    CHECK(cudaEventCreate(&stop));
     // 记录 cudaMemcpy 的开始时间
-    cudaEventRecord(start, 0);  // 绑定在默认流中！！这个和设备相关联把！！多设备如何确定？？
+    CHECK(cudaEventRecord(start, 0));  // 绑定在默认流中！！这个和设备相关联把！！多设备如何确定？？
 
     DIR *dir;
     struct dirent *ent;
@@ -225,22 +241,22 @@ void resize3D(std::string dirpath, int width, int height, int depth, int newWidt
                     int streamPos = count % STREAM_NUM;
                     if (count % STREAM_NUM == 0 && count != 0) {
                         for (int i = 0; i < STREAM_NUM; i++) {
-                            cudaSetDevice(i % nDevices);
-                            cudaStreamSynchronize(stream[i]);  // 需要访问输出结果，所以需要进行同步
+                            CHECK(cudaSetDevice(i % nDevices));
+                            CHECK(cudaStreamSynchronize(stream[i]));  // 需要访问输出结果，所以需要进行同步
                             cv::Mat rgb = getRgb(h_output[i]);
                             cv::imwrite("resized_image_raw" + std::to_string(count) + std::to_string(i) + ".jpg", rgb);
                         }
                     }
                     // fread之前需要确保之前的数据已经传输完毕了，但是需要用同步来保证把！！！
                     fread(h_input[streamPos], sizeof(float), inputSize, file);
-                    cudaSetDevice(streamPos % nDevices);
-                    cudaMemcpyAsync(d_input[streamPos], h_input[streamPos], width * height * depth * sizeof(float), cudaMemcpyHostToDevice, stream[streamPos]);
+                    CHECK(cudaSetDevice(streamPos % nDevices));
+                    CHECK(cudaMemcpyAsync(d_input[streamPos], h_input[streamPos], width * height * depth * sizeof(float), cudaMemcpyHostToDevice, stream[streamPos]));
                     dim3 blockSize(12, 12, 6);
                     dim3 gridSize((newWidth + blockSize.x - 1) / blockSize.x,
                                   (newHeight + blockSize.y - 1) / blockSize.y,
                                   (newDepth + blockSize.z - 1) / blockSize.z);
                     trilinearInterpolation<<<gridSize, blockSize, 0, stream[streamPos]>>>(d_input[streamPos], d_output[streamPos], width, height, depth, newWidth, newHeight, newDepth);
-                    cudaMemcpyAsync(h_output[streamPos], d_output[streamPos], newWidth * newHeight * newDepth * sizeof(float), cudaMemcpyDeviceToHost, stream[streamPos]);
+                    CHECK(cudaMemcpyAsync(h_output[streamPos], d_output[streamPos], newWidth * newHeight * newDepth * sizeof(float), cudaMemcpyDeviceToHost, stream[streamPos]));
                     
                     fclose(file);
                     count++;
@@ -253,30 +269,32 @@ void resize3D(std::string dirpath, int width, int height, int depth, int newWidt
     }
     // 最后同步所有的stream 注意在对应的设备上执行！！！
     for (int i = 0; i < STREAM_NUM; i++) {
-        cudaSetDevice(i % nDevices);
-        cudaStreamSynchronize(stream[i]);
+       CHECK(cudaSetDevice(i % nDevices));
+        CHECK(cudaStreamSynchronize(stream[i]));
         cv::Mat rgb = getRgb(h_output[i]);
         cv::imwrite("resized_image_raw" + std::to_string(count) + std::to_string(i) + ".jpg", rgb);
     }
     // cudaMemcpy(d_input, input, width * height * depth * sizeof(float), cudaMemcpyHostToDevice);
     // 记录 cudaMemcpy 的结束时间
-    cudaEventRecord(stop, 0);
-    cudaEventSynchronize(stop);
+    CHECK(cudaSetDevice(0));  
+    CHECK(cudaEventRecord(stop, 0));
+    CHECK(cudaEventSynchronize(stop));
     // 计算 cudaMemcpy 的执行时间
-    cudaEventElapsedTime(&elapsedTime, start, stop);
+    CHECK(cudaEventElapsedTime(&elapsedTime, start, stop));
     std::cout << "all time: " << elapsedTime << " ms" << std::endl;
     for (int i = 0; i < STREAM_NUM; i++) {
-        cudaSetDevice(i % nDevices);
-        cudaFreeHost(h_input[i]);
+        CHECK(cudaSetDevice(i % nDevices));
+       CHECK(cudaFreeHost(h_input[i]));
         // free(h_input[i]);
-        cudaFree(d_input[i]);
-        cudaFreeHost(h_output[i]);
+        CHECK(cudaFree(d_input[i]));
+        CHECK(cudaFreeHost(h_output[i]));
         // free(h_output[i]);
-        cudaFree(d_output[i]);
-        cudaStreamDestroy(stream[i]);
+        CHECK(cudaFree(d_output[i]));
+        CHECK(cudaStreamDestroy(stream[i]));
     }
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
+    CHECK(cudaSetDevice(0));
+    CHECK(cudaEventDestroy(start));
+    CHECK(cudaEventDestroy(stop));
     // // dim3 blockSize(16, 16, 4);
     // dim3 blockSize(12, 12, 6);
     // dim3 gridSize((newWidth + blockSize.x - 1) / blockSize.x,

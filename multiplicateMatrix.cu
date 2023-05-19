@@ -2,10 +2,14 @@
 #include <stdlib.h>
 #include <cuda_runtime.h>
 
-#define M 512 // 矩阵A的行数
-#define K 512 // 矩阵A的列数，矩阵B的行数
-#define N 512 // 矩阵B的列数
-#define TILE_WIDTH 16 // 分块矩阵的大小
+#define M (1024 * 20) // 矩阵A的行数
+#define K (1024 * 20)// 矩阵A的列数，矩阵B的行数
+#define N (1024 * 20)// 矩阵B的列数
+#define TILE_WIDTH 32 // 分块矩阵的大小
+// #define M (64) // 矩阵A的行数
+// #define K (64)// 矩阵A的列数，矩阵B的行数
+// #define N (64)// 矩阵B的列数
+// #define TILE_WIDTH 32 // 分块矩阵的大小
 
 // 初始化矩阵，随机生成0-10之间的浮点数
 void initial(float *array, int size)
@@ -27,7 +31,7 @@ __global__ void multiplicateMatrixOri(float *array_A, float *array_B, float *arr
     {
         float sum = 0;
         for (int k = 0; k < K_p; k++) // C中的某个元素为A中对应行和B中对应列向量的乘积和。
-        {
+        {// 同一个块之间不会重复访问！！！
             sum += array_A[iy * K_p + k] * array_B[k * N_p + ix];
         }
         array_C[iy * N_p + ix] = sum;
@@ -115,8 +119,36 @@ int main(int argc, char **argv)
     dim3 grid((N + block.x - 1) / block.x,
               (M + block.y - 1) / block.y); // 定义grid为二维结构
 
+    // 初始化 CUDA 事件
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    float milliseconds = 0;
+    // 记录开始时间
+    cudaEventRecord(start);
     multiplicateMatrix<<<grid, block>>>(d_A, d_B, d_C, M, K, N); // 调用核函数
+    cudaEventRecord(stop);
+    // 等待事件完成
+    cudaEventSynchronize(stop);
+    milliseconds = 0;
+    cudaEventElapsedTime(&milliseconds, start, stop);
+    printf("Execution time of multiplicateMatrix withSharedMem: %f ms\n", milliseconds);
 
+    // 记录开始时间
+    cudaEventRecord(start);
+    multiplicateMatrixOri<<<grid, block>>>(d_A, d_B, d_C, M, K, N); // 调用核函数
+    cudaEventRecord(stop);
+    // 等待事件完成
+    cudaEventSynchronize(stop);
+    milliseconds = 0;
+    cudaEventElapsedTime(&milliseconds, start, stop);
+    printf("Execution time of multiplicateMatrix withoutSharedMem: %f ms\n", milliseconds);
+
+     
+
+    // 销毁 CUDA 事件
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
     cudaMemcpy(h_C, d_C, Cxy * sizeof(float), cudaMemcpyDeviceToHost); // 将GPU上的计算结果拷贝回CPU
 
     cudaFree(d_A); // 释放GPU显存资源
